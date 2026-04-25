@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FacePlay — Join</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0f; color: #fff; font-family: 'Segoe UI', sans-serif; min-height: 100vh; padding: 24px; }
+  h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+  h1 span { color: #1db954; }
+  .sub { color: #888; margin-bottom: 28px; font-size: 0.95rem; }
+  label { display: block; font-size: 0.8rem; color: #888; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  input[type=text] {
+    width: 100%; background: #1e1e2e; border: 1px solid #333; color: #fff;
+    padding: 14px 16px; border-radius: 12px; font-size: 1rem; margin-bottom: 20px; outline: none;
+    -webkit-appearance: none;
+  }
+  input[type=text]:focus { border-color: #1db954; }
+  .photo-btn {
+    width: 100%; background: #1e1e2e; border: 2px dashed #333; color: #888;
+    padding: 24px; border-radius: 12px; font-size: 0.95rem; cursor: pointer;
+    text-align: center; margin-bottom: 20px; transition: all 0.2s;
+  }
+  .photo-btn:hover { border-color: #1db954; color: #fff; }
+  input[type=file] { display: none; }
+  .preview { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid #1db954; display: none; margin: 0 auto 20px; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .search-row input { margin-bottom: 0; flex: 1; }
+  .btn-search { background: #333; color: #fff; border: none; padding: 14px 18px; border-radius: 12px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+  .track { display: flex; align-items: center; gap: 12px; padding: 12px; background: #1e1e2e; border-radius: 12px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; }
+  .track.selected { border-color: #1db954; background: #1a3a2a; }
+  .track img { width: 48px; height: 48px; border-radius: 8px; }
+  .track-name { font-weight: 600; font-size: 0.9rem; }
+  .track-artist { color: #888; font-size: 0.8rem; }
+  .btn-register { width: 100%; background: #1db954; color: #000; border: none; padding: 16px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; cursor: pointer; margin-top: 12px; }
+  .btn-register:active { background: #17a349; }
+  .msg { text-align: center; padding: 14px; border-radius: 12px; margin-top: 16px; display: none; font-weight: 600; }
+  .msg.success { background: #1a3a2a; color: #1db954; }
+  .msg.error { background: #3a1a1a; color: #e05555; }
+  .results { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<h1>Face<span>Play</span></h1>
+<p class="sub">Register your face — your song plays when you walk in</p>
+
+<label>Your Name</label>
+<input type="text" id="name" placeholder="First name">
+
+<label>Your Photo</label>
+<div class="photo-btn" onclick="document.getElementById('photo-input').click()">
+  📸 Tap to take or upload a photo
+</div>
+<input type="file" id="photo-input" accept="image/*" capture="user" onchange="previewPhoto(this)">
+<img class="preview" id="preview">
+
+<label>Your Song</label>
+<div class="search-row">
+  <input type="text" id="search" placeholder="Search Spotify..." onkeydown="if(event.key==='Enter')search()">
+  <button class="btn-search" onclick="searchSong()">Go</button>
+</div>
+<div class="results" id="results"></div>
+<input type="hidden" id="uri">
+<input type="hidden" id="song-name">
+
+<button class="btn-register" onclick="register()">Register Me</button>
+<div class="msg" id="msg"></div>
+
+<script>
+function previewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const p = document.getElementById('preview');
+  p.src = URL.createObjectURL(file);
+  p.style.display = 'block';
+}
+
+async function searchSong() {
+  const q = document.getElementById('search').value.trim();
+  if (!q) return;
+  const res = await fetch(`/api/search_song?q=${encodeURIComponent(q)}`);
+  const tracks = await res.json();
+  const c = document.getElementById('results');
+  if (!tracks.length) { c.innerHTML = '<p style="color:#888;font-size:0.85rem;padding:8px">No results</p>'; return; }
+  c.innerHTML = tracks.map(t => `
+    <div class="track" onclick="select('${t.uri}','${t.name.replace(/'/g,"\\'")} - ${t.artist.replace(/'/g,"\\'")}',this)">
+      <img src="${t.album_art}">
+      <div>
+        <div class="track-name">${t.name}</div>
+        <div class="track-artist">${t.artist}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function select(uri, name, el) {
+  document.querySelectorAll('.track').forEach(t => t.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('uri').value = uri;
+  document.getElementById('song-name').value = name;
+}
+
+async function register() {
+  const name = document.getElementById('name').value.trim();
+  const photo = document.getElementById('photo-input').files[0];
+  const uri = document.getElementById('uri').value;
+  const songName = document.getElementById('song-name').value;
+
+  if (!name || !photo) { show('Name and photo required.', 'error'); return; }
+
+  const form = new FormData();
+  form.append('name', name);
+  form.append('photo', photo);
+  form.append('song_uri', uri);
+  form.append('song_name', songName);
+
+  const res = await fetch('/api/register', { method: 'POST', body: form });
+  const data = await res.json();
+  data.success ? show(`✓ You're registered! Your song: "${data.song}"`, 'success') : show(data.error || 'Failed', 'error');
+}
+
+function show(text, type) {
+  const m = document.getElementById('msg');
+  m.textContent = text;
+  m.className = `msg ${type}`;
+  m.style.display = 'block';
+}
+</script>
+</body>
+</html>

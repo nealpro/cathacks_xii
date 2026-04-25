@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Register — FacePlay</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0f; color: #fff; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
+  .card { background: #1e1e2e; border-radius: 20px; padding: 40px; width: 100%; max-width: 500px; }
+  h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+  .sub { color: #888; margin-bottom: 32px; }
+  label { display: block; font-size: 0.85rem; color: #888; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  input[type=text], input[type=file] {
+    width: 100%; background: #2a2a3e; border: 1px solid #333; color: #fff;
+    padding: 12px 16px; border-radius: 10px; font-size: 0.95rem; margin-bottom: 20px; outline: none;
+  }
+  input[type=text]:focus { border-color: #1db954; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .search-row input { margin-bottom: 0; flex: 1; }
+  .btn { padding: 12px 20px; border-radius: 10px; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 700; }
+  .btn-green { background: #1db954; color: #000; width: 100%; font-size: 1rem; padding: 14px; margin-top: 8px; }
+  .btn-green:hover { background: #1ed760; }
+  .btn-search { background: #333; color: #fff; }
+  .results { margin-bottom: 20px; }
+  .track {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    background: #2a2a3e; border-radius: 10px; margin-bottom: 8px; cursor: pointer;
+    border: 2px solid transparent; transition: all 0.15s;
+  }
+  .track:hover { border-color: #1db954; }
+  .track.selected { border-color: #1db954; background: #1a3a2a; }
+  .track img { width: 44px; height: 44px; border-radius: 6px; }
+  .track-name { font-weight: 600; font-size: 0.9rem; }
+  .track-artist { color: #888; font-size: 0.8rem; }
+  .preview { background: #2a2a3e; border-radius: 10px; padding: 14px; margin-bottom: 20px; display: none; }
+  .preview img { width: 60px; height: 60px; border-radius: 8px; float: left; margin-right: 12px; }
+  .preview .info { overflow: hidden; }
+  .preview .info strong { display: block; }
+  .preview .info span { color: #1db954; font-size: 0.85rem; }
+  .msg { text-align: center; padding: 12px; border-radius: 10px; margin-top: 16px; display: none; }
+  .msg.success { background: #1a3a2a; color: #1db954; }
+  .msg.error { background: #3a1a1a; color: #e05555; }
+  .photo-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #1db954; display: none; margin-bottom: 20px; }
+  a { color: #1db954; }
+</style>
+</head>
+<body>
+<div class="card">
+  <a href="/" style="font-size:0.9rem">← Back</a>
+  <h1 style="margin-top:16px">Add Person</h1>
+  <p class="sub">Register a face and assign a Spotify song</p>
+
+  <label>Name</label>
+  <input type="text" id="name" placeholder="e.g. Alex">
+
+  <label>Photo</label>
+  <input type="file" id="photo" accept="image/*" onchange="previewPhoto(this)">
+  <img class="photo-preview" id="photo-preview">
+
+  <label>Spotify Song</label>
+  <div class="search-row">
+    <input type="text" id="search-query" placeholder="Search for a song..." onkeydown="if(event.key==='Enter')searchSong()">
+    <button class="btn btn-search" onclick="searchSong()">Search</button>
+  </div>
+
+  <div class="results" id="results"></div>
+
+  <input type="hidden" id="selected-uri">
+  <input type="hidden" id="selected-name">
+
+  <button class="btn btn-green" onclick="register()">Register</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+function previewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const preview = document.getElementById('photo-preview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+}
+
+async function searchSong() {
+  const q = document.getElementById('search-query').value.trim();
+  if (!q) return;
+  const res = await fetch(`/api/search_song?q=${encodeURIComponent(q)}`);
+  const tracks = await res.json();
+  const container = document.getElementById('results');
+  if (!tracks.length) { container.innerHTML = '<p style="color:#888;font-size:0.85rem">No results</p>'; return; }
+  container.innerHTML = tracks.map(t => `
+    <div class="track" onclick="selectTrack('${t.uri}', '${t.name.replace(/'/g,"\\'")} - ${t.artist.replace(/'/g,"\\'")}', this)">
+      <img src="${t.album_art}" alt="">
+      <div>
+        <div class="track-name">${t.name}</div>
+        <div class="track-artist">${t.artist}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectTrack(uri, name, el) {
+  document.querySelectorAll('.track').forEach(t => t.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('selected-uri').value = uri;
+  document.getElementById('selected-name').value = name;
+}
+
+async function register() {
+  const name = document.getElementById('name').value.trim();
+  const photo = document.getElementById('photo').files[0];
+  const uri = document.getElementById('selected-uri').value;
+  const songName = document.getElementById('selected-name').value;
+  const msg = document.getElementById('msg');
+
+  if (!name || !photo) { showMsg('Name and photo are required.', 'error'); return; }
+
+  const form = new FormData();
+  form.append('name', name);
+  form.append('photo', photo);
+  form.append('song_uri', uri);
+  form.append('song_name', songName);
+
+  const res = await fetch('/api/register', { method: 'POST', body: form });
+  const data = await res.json();
+
+  if (data.success) {
+    showMsg(`✓ ${data.name} registered with "${data.song}"`, 'success');
+  } else {
+    showMsg(data.error || 'Registration failed.', 'error');
+  }
+}
+
+function showMsg(text, type) {
+  const msg = document.getElementById('msg');
+  msg.textContent = text;
+  msg.className = `msg ${type}`;
+  msg.style.display = 'block';
+}
+</script>
+</body>
+</html>
